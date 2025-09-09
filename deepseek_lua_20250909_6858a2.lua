@@ -513,7 +513,7 @@ UserInputService.InputChanged:Connect(function(input)
     end
 end)
 
--- Load scripts function
+-- Load scripts function (จากไฟล์ load.txt)
 local function loadScripts()
     LoadingFrame.Visible = true
     
@@ -525,173 +525,70 @@ local function loadScripts()
     end
     
     local raw_url = "https://raw.githubusercontent.com/cosmix-ai/Testinglua/main/all-scripts.lua"
-    
-    local success, err = pcall(function()
-        local raw = game:HttpGet(raw_url)
-        local scripts = {}
-        
-        -- ใช้รูปแบบใหม่สำหรับการแยกวิเคราะห์สคริปต์จากลิงก์ของคุณ
-        for line in raw:gmatch("[^\r\n]+") do
-            local title, script = line:match("title%s*=%s*[\"'](.-)[\"']%s*,%s*script%s*=%s*[\"'](.-)[\"']")
-            if title and script then
-                -- ถอดรหัส URL encoding หากมี
-                script = script:gsub("\\n", "\n"):gsub("\\t", "\t"):gsub("\\\"", "\"")
-                table.insert(scripts, {title = title, code = script})
+    local raw = game:HttpGet(raw_url)
+
+    -- แยกสคริปต์ตามรูปแบบจากไฟล์ load.txt
+    local scripts = {}
+    local current_title, current_code = nil, ""
+
+    for line in raw:gmatch("[^\r\n]+") do
+        local title = line:match("^title=(.-),script=")
+        if title then
+            if current_title and current_code ~= "" then
+                table.insert(scripts, {title=current_title, code=current_code})
             end
-        end
-        
-        -- หากไม่พบรูปแบบ ให้ลองหารูปแบบอื่น
-        if #scripts == 0 then
-            for title, script in raw:gmatch("title:([^,]+),script:([^\n]+)") do
-                table.insert(scripts, {title = title:gsub("^%s*(.-)%s*$", "%1"), code = script:gsub("^%s*(.-)%s*$", "%1")})
-            end
-        end
-        
-        -- ถ้ายังไม่พบสคริปต์ ให้ใช้สคริปต์ตัวอย่าง
-        if #scripts == 0 then
-            table.insert(scripts, {
-                title = "ตัวอย่างสคริปต์",
-                code = "print('Hello from Cosmic Hub!')"
-            })
-            showStatus("ใช้สคริปต์ตัวอย่าง ตรวจสอบรูปแบบไฟล์", Color3.fromRGB(200, 150, 50))
+            current_title = title
+            current_code = line:sub(line:find("script=")+7)
         else
-            showStatus("โหลดสคริปต์สำเร็จ: " .. #scripts .. " สคริปต์", Color3.fromRGB(40, 100, 60))
+            current_code = current_code .. "\n" .. line
         end
-        
-        -- Create script buttons
-        for i, s in ipairs(scripts) do
-            local scriptButton = Instance.new("Frame")
-            scriptButton.Size = UDim2.new(0, isMobile and 180 or 200, 0, isMobile and 120 or 140)
-            scriptButton.BackgroundColor3 = Color3.fromRGB(35, 40, 50)
-            scriptButton.BackgroundTransparency = 0.1
-            scriptButton.Parent = ScriptsContainer
-            
-            local UICornerButton = Instance.new("UICorner")
-            UICornerButton.CornerRadius = UDim.new(0, 12)
-            UICornerButton.Parent = scriptButton
-            
-            -- Script icon/image
-            local scriptIcon = Instance.new("ImageLabel")
-            scriptIcon.Size = UDim2.new(0, 40, 0, 40)
-            scriptIcon.Position = UDim2.new(0, 10, 0, 10)
-            scriptIcon.BackgroundTransparency = 1
-            scriptIcon.Image = "rbxassetid://7072718162"
-            scriptIcon.Parent = scriptButton
-            
-            local scriptName = Instance.new("TextLabel")
-            scriptName.Size = UDim2.new(1, -60, 0, isMobile and 30 or 40)
-            scriptName.Position = UDim2.new(0, 55, 0, 10)
-            scriptName.BackgroundTransparency = 1
-            scriptName.Text = s.title
-            scriptName.Font = Enum.Font.GothamBold
-            scriptName.TextColor3 = Color3.fromRGB(220, 230, 255)
-            scriptName.TextSize = isMobile and 12 or 14
-            scriptName.TextXAlignment = Enum.TextXAlignment.Left
-            scriptName.TextWrapped = true
-            scriptName.Parent = scriptButton
-            
-            local executeButton = Instance.new("TextButton")
-            executeButton.Size = UDim2.new(0, isMobile and 90 or 100, 0, isMobile and 25 or 30)
-            executeButton.Position = UDim2.new(0.5, -isMobile and 45 or 50, 1, isMobile and -35 or -40)
-            executeButton.BackgroundColor3 = Color3.fromRGB(50, 120, 200)
-            executeButton.BackgroundTransparency = 0.1
-            executeButton.Text = "Execute"
-            executeButton.Font = Enum.Font.Gotham
-            executeButton.TextColor3 = Color3.fromRGB(220, 230, 255)
-            executeButton.TextSize = isMobile and 12 or 14
-            executeButton.Parent = scriptButton
-            
-            local UICornerExecute = Instance.new("UICorner")
-            UICornerExecute.CornerRadius = UDim.new(0, 8)
-            UICornerExecute.Parent = executeButton
-            
-            -- Button interactions
-            executeButton.MouseEnter:Connect(function()
-                buttonHover(executeButton)
-            end)
-            
-            executeButton.MouseLeave:Connect(function()
-                buttonLeave(executeButton)
-            end)
-            
-            executeButton.MouseButton1Down:Connect(function()
-                buttonClick(executeButton)
-            end)
-            
-            executeButton.MouseButton1Click:Connect(function()
-                local fn, compileErr = loadstring(s.code)
-                if fn then
-                    local success, execErr = pcall(fn)
-                    if success then
-                        showStatus("Executed: " .. s.title, Color3.fromRGB(40, 100, 60))
-                    else
-                        showStatus("Error: " .. execErr, Color3.fromRGB(100, 40, 60))
-                        warn("Error in script:", s.title, execErr)
-                    end
-                else
-                    showStatus("Compile Error: " .. compileErr, Color3.fromRGB(100, 40, 60))
-                    warn("Compile error in script:", s.title, compileErr)
-                end
-            end)
-            
-            -- สำหรับมือถือ: เพิ่มการตอบสนองการสัมผัส
-            if isMobile then
-                executeButton.InputBegan:Connect(function(input)
-                    if input.UserInputType == Enum.UserInputType.Touch then
-                        buttonClick(executeButton)
-                        local fn, compileErr = loadstring(s.code)
-                        if fn then
-                            local success, execErr = pcall(fn)
-                            if success then
-                                showStatus("Executed: " .. s.title, Color3.fromRGB(40, 100, 60))
-                            else
-                                showStatus("Error: " .. execErr, Color3.fromRGB(100, 40, 60))
-                                warn("Error in script:", s.title, execErr)
-                            end
-                        else
-                            showStatus("Compile Error: " .. compileErr, Color3.fromRGB(100, 40, 60))
-                            warn("Compile error in script:", s.title, compileErr)
-                        end
-                    end
-                end)
-            end
-        end
-        
-        -- Update container size
-        ScriptsContainer.CanvasSize = UDim2.new(
-            0, UIListLayout.AbsoluteContentSize.X + 10, 
-            0, 0
-        )
-        
-        LoadingFrame.Visible = false
-    end)
+    end
+    if current_title and current_code ~= "" then
+        table.insert(scripts, {title=current_title, code=current_code})
+    end
+
+    -- ถ้ายังไม่พบสคริปต์ ให้ใช้สคริปต์ตัวอย่าง
+    if #scripts == 0 then
+        table.insert(scripts, {
+            title = "ตัวอย่างสคริปต์",
+            code = "print('Hello from Cosmic Hub!')"
+        })
+        showStatus("ใช้สคริปต์ตัวอย่าง ตรวจสอบรูปแบบไฟล์", Color3.fromRGB(200, 150, 50))
+    else
+        showStatus("โหลดสคริปต์สำเร็จ: " .. #scripts .. " สคริปต์", Color3.fromRGB(40, 100, 60))
+    end
     
-    if not success then
-        LoadingFrame.Visible = false
-        showStatus("Failed to load scripts: " .. err, Color3.fromRGB(100, 40, 60))
-        
-        -- สร้างปุ่มตัวอย่างเมื่อโหลดล้มเหลว
-        local sampleScript = Instance.new("Frame")
-        sampleScript.Size = UDim2.new(0, isMobile and 180 or 200, 0, isMobile and 120 or 140)
-        sampleScript.BackgroundColor3 = Color3.fromRGB(35, 40, 50)
-        sampleScript.BackgroundTransparency = 0.1
-        sampleScript.Parent = ScriptsContainer
+    -- Create script buttons
+    for i, s in ipairs(scripts) do
+        local scriptButton = Instance.new("Frame")
+        scriptButton.Size = UDim2.new(0, isMobile and 180 or 200, 0, isMobile and 120 or 140)
+        scriptButton.BackgroundColor3 = Color3.fromRGB(35, 40, 50)
+        scriptButton.BackgroundTransparency = 0.1
+        scriptButton.Parent = ScriptsContainer
         
         local UICornerButton = Instance.new("UICorner")
         UICornerButton.CornerRadius = UDim.new(0, 12)
-        UICornerButton.Parent = sampleScript
+        UICornerButton.Parent = scriptButton
+        
+        -- Script icon/image
+        local scriptIcon = Instance.new("ImageLabel")
+        scriptIcon.Size = UDim2.new(0, 40, 0, 40)
+        scriptIcon.Position = UDim2.new(0, 10, 0, 10)
+        scriptIcon.BackgroundTransparency = 1
+        scriptIcon.Image = "rbxassetid://7072718162"
+        scriptIcon.Parent = scriptButton
         
         local scriptName = Instance.new("TextLabel")
-        scriptName.Size = UDim2.new(1, -20, 0, isMobile and 30 or 40)
-        scriptName.Position = UDim2.new(0, 10, 0, 10)
+        scriptName.Size = UDim2.new(1, -60, 0, isMobile and 30 or 40)
+        scriptName.Position = UDim2.new(0, 55, 0, 10)
         scriptName.BackgroundTransparency = 1
-        scriptName.Text = "ตัวอย่างสคริปต์"
+        scriptName.Text = s.title
         scriptName.Font = Enum.Font.GothamBold
         scriptName.TextColor3 = Color3.fromRGB(220, 230, 255)
         scriptName.TextSize = isMobile and 12 or 14
         scriptName.TextXAlignment = Enum.TextXAlignment.Left
         scriptName.TextWrapped = true
-        scriptName.Parent = sampleScript
+        scriptName.Parent = scriptButton
         
         local executeButton = Instance.new("TextButton")
         executeButton.Size = UDim2.new(0, isMobile and 90 or 100, 0, isMobile and 25 or 30)
@@ -702,17 +599,71 @@ local function loadScripts()
         executeButton.Font = Enum.Font.Gotham
         executeButton.TextColor3 = Color3.fromRGB(220, 230, 255)
         executeButton.TextSize = isMobile and 12 or 14
-        executeButton.Parent = sampleScript
+        executeButton.Parent = scriptButton
         
         local UICornerExecute = Instance.new("UICorner")
         UICornerExecute.CornerRadius = UDim.new(0, 8)
         UICornerExecute.Parent = executeButton
         
-        executeButton.MouseButton1Click:Connect(function()
-            print("Hello from Cosmic Hub Sample Script!")
-            showStatus("Executed sample script", Color3.fromRGB(40, 100, 60))
+        -- Button interactions
+        executeButton.MouseEnter:Connect(function()
+            buttonHover(executeButton)
         end)
+        
+        executeButton.MouseLeave:Connect(function()
+            buttonLeave(executeButton)
+        end)
+        
+        executeButton.MouseButton1Down:Connect(function()
+            buttonClick(executeButton)
+        end)
+        
+        executeButton.MouseButton1Click:Connect(function()
+            local fn, compileErr = loadstring(s.code)
+            if fn then
+                local success, execErr = pcall(fn)
+                if success then
+                    showStatus("Executed: " .. s.title, Color3.fromRGB(40, 100, 60))
+                else
+                    showStatus("Error: " .. execErr, Color3.fromRGB(100, 40, 60))
+                    warn("Error in script:", s.title, execErr)
+                end
+            else
+                showStatus("Compile Error: " .. compileErr, Color3.fromRGB(100, 40, 60))
+                warn("Compile error in script:", s.title, compileErr)
+            end
+        end)
+        
+        -- สำหรับมือถือ: เพิ่มการตอบสนองการสัมผัส
+        if isMobile then
+            executeButton.InputBegan:Connect(function(input)
+                if input.UserInputType == Enum.UserInputType.Touch then
+                    buttonClick(executeButton)
+                    local fn, compileErr = loadstring(s.code)
+                    if fn then
+                        local success, execErr = pcall(fn)
+                        if success then
+                            showStatus("Executed: " .. s.title, Color3.fromRGB(40, 100, 60))
+                        else
+                            showStatus("Error: " .. execErr, Color3.fromRGB(100, 40, 60))
+                            warn("Error in script:", s.title, execErr)
+                        end
+                    else
+                        showStatus("Compile Error: " .. compileErr, Color3.fromRGB(100, 40, 60))
+                        warn("Compile error in script:", s.title, compileErr)
+                    end
+                end
+            end)
+        end
     end
+    
+    -- Update container size
+    ScriptsContainer.CanvasSize = UDim2.new(
+        0, UIListLayout.AbsoluteContentSize.X + 10, 
+        0, 0
+    )
+    
+    LoadingFrame.Visible = false
 end
 
 -- Connect events
@@ -759,7 +710,7 @@ RefreshButton.MouseButton1Click:Connect(function()
     loadScripts()
 end)
 
--- Make window draggable
+-- Make window draggable (จากไฟล์ gui.txt)
 local dragging = false
 local dragStart = Vector2.new(0,0)
 local startPos = MainFrame.Position
